@@ -6,8 +6,8 @@ This document describes the integration between Keerthana's frontend (@version_k
 ## Configuration
 
 ### Environment Variables
-- **File**: `.env.local`
-- **Variable**: `NEXT_PUBLIC_API_URL=http://localhost:4000`
+- **File**: `.env.local` (or `.env`)
+- **Variable**: `NEXT_PUBLIC_API_URL=http://localhost:3001`
 
 ### Dependencies Added
 - `axios`: ^1.6.0 (HTTP client for API calls)
@@ -16,7 +16,7 @@ This document describes the integration between Keerthana's frontend (@version_k
 
 ### Base URL
 ```
-http://localhost:4000
+http://localhost:3001
 ```
 
 ### API Modules Created
@@ -163,7 +163,7 @@ The backend uses TypeORM with entities:
 cd version_1/lms_backend
 npm run dev
 ```
-Backend should start on http://localhost:4000
+Backend should start on http://localhost:3001
 
 ### 2. Start Frontend
 ```bash
@@ -209,7 +209,7 @@ Check browser DevTools Network tab:
 ## Common Issues & Solutions
 
 ### Issue: "Cannot connect to server"
-**Solution**: Ensure backend is running on port 4000
+**Solution**: Ensure backend is running on port 3001
 ```bash
 cd version_1/lms_backend
 npm run dev
