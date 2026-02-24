@@ -11,9 +11,11 @@ async function start() {
   const dbName = getConfiguredDbName() || '(unknown)';
 
   // Safe startup log (no secrets).
-  const dbHost = process.env.DB_HOST;
-  const dbPort = process.env.DB_PORT || '3306';
-  console.log(dbHost ? `MySQL target: ${dbHost}:${dbPort}/${dbName}` : 'MySQL target: (DB_HOST not set yet)');
+  const dbHost = process.env.DB_HOST || process.env.MYSQL_HOST || process.env.MYSQLHOST;
+  const dbPort = process.env.MYSQL_PREVIEW_PORT || process.env.DB_PORT || process.env.MYSQL_PORT || '3306';
+  console.log(
+    dbHost ? `MySQL target: ${dbHost}:${dbPort}/${dbName}` : 'MySQL target: (DB_HOST/MYSQL_HOST not set yet)'
+  );
 
   try {
     await initializeDataSource();

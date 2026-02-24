@@ -70,19 +70,28 @@ function buildMySqlSslOptionsFromEnv() {
  * Optional: DB_PORT (default 3306)
  */
 function buildMySqlDataSourceOptionsFromEnv() {
-  const host = process.env.DB_HOST;
-  const port = parseIntEnv(process.env.DB_PORT, 3306);
-  const username = process.env.DB_USERNAME;
-  const password = process.env.DB_PASSWORD;
-  const database = process.env.DEFAULT_DB;
+  // Support multiple env-var naming conventions to avoid "mismatch" failures across environments.
+  // Canonical vars for this repo are DB_* and DEFAULT_DB, but previews sometimes provide MYSQL_*.
+  const host = process.env.DB_HOST || process.env.MYSQL_HOST || process.env.MYSQLHOST;
+  const username = process.env.DB_USERNAME || process.env.MYSQL_USER || process.env.MYSQL_USERNAME;
+  const password = process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD;
+  const database = process.env.DEFAULT_DB || process.env.MYSQL_DB || process.env.MYSQL_DATABASE;
+
+  // Preview-specific override (requested): MySQL preview runs on port 3002.
+  // If MYSQL_PREVIEW_PORT is set, it wins; otherwise fall back to DB_PORT/MYSQL_PORT and finally 3306.
+  const port = parseIntEnv(
+    process.env.MYSQL_PREVIEW_PORT || process.env.DB_PORT || process.env.MYSQL_PORT,
+    3306
+  );
+
   const connectTimeout = parseIntEnv(process.env.DB_CONNECT_TIMEOUT_MS, 20000);
   const poolSize = parseIntEnv(process.env.DB_POOL_SIZE, 10);
 
   const missing = [];
-  if (!host) missing.push('DB_HOST');
-  if (!username) missing.push('DB_USERNAME');
-  if (!password) missing.push('DB_PASSWORD');
-  if (!database) missing.push('DEFAULT_DB');
+  if (!host) missing.push('DB_HOST (or MYSQL_HOST)');
+  if (!username) missing.push('DB_USERNAME (or MYSQL_USER)');
+  if (!password) missing.push('DB_PASSWORD (or MYSQL_PASSWORD)');
+  if (!database) missing.push('DEFAULT_DB (or MYSQL_DB)');
 
   if (missing.length > 0) {
     const err = new Error(`MySQL env vars missing: ${missing.join(', ')}`);
