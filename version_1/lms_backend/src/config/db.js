@@ -26,17 +26,20 @@ function describeTarget(target) {
  * Build AWS RDS-compatible TLS options for mysql2.
  *
  * Behavior:
+ * - Enabled by default (RDS-safe) unless explicitly disabled (DB_SSL=false).
  * - Looks for an RDS CA bundle file named `global-bundle.pem` at the backend root
  *   (same folder as package.json), or via DB_SSL_CA_PATH.
- * - Sets rejectUnauthorized=false as required.
+ * - Uses `rejectUnauthorized=false` (common when using AWS RDS bundle + older client defaults).
  *
  * @returns {false|{ca?: string, rejectUnauthorized: boolean}}
  */
 function buildMySqlSslOptionsFromEnv() {
   const sslEnabledRaw = process.env.DB_SSL || process.env.DB_SSL_ENABLED;
+
+  // RDS-safe default: ON unless explicitly disabled.
   const sslEnabled =
     sslEnabledRaw === undefined || sslEnabledRaw === null
-      ? true // default ON for production RDS safety; can be disabled by setting DB_SSL=false
+      ? true
       : !['false', '0', 'no'].includes(String(sslEnabledRaw).toLowerCase());
 
   if (!sslEnabled) {
@@ -45,7 +48,10 @@ function buildMySqlSslOptionsFromEnv() {
 
   const caPathFromEnv = process.env.DB_SSL_CA_PATH;
   const defaultCaPath = path.join(process.cwd(), 'global-bundle.pem');
-  const caPath = caPathFromEnv && String(caPathFromEnv).trim().length > 0 ? String(caPathFromEnv).trim() : defaultCaPath;
+  const caPath =
+    caPathFromEnv && String(caPathFromEnv).trim().length > 0
+      ? String(caPathFromEnv).trim()
+      : defaultCaPath;
 
   let ca;
   try {
@@ -65,33 +71,72 @@ function buildMySqlSslOptionsFromEnv() {
 }
 
 /**
+ * Decide whether preview MySQL port override should be used.
+ *
+ * The key safety requirement: preview overrides must NOT accidentally override an RDS/production
+ * port (3306), which can happen when the backend inherits preview system env vars.
+ *
+ * We only apply MYSQL_PREVIEW_PORT when explicitly enabled:
+ * - DB_USE_PREVIEW_PORT=true, OR
+ * - NODE_ENV/APP_ENV indicates preview.
+ *
+ * @returns {boolean}
+ */
+function shouldUsePreviewDbPort() {
+  const explicit = (process.env.DB_USE_PREVIEW_PORT || '').toLowerCase();
+  if (['true', '1', 'yes'].includes(explicit)) return true;
+  if (['false', '0', 'no'].includes(explicit)) return false;
+
+  const env = (process.env.APP_ENV || process.env.NODE_ENV || '').toLowerCase();
+  return env === 'preview';
+}
+
+/**
  * Build MySQL DataSource config from env vars.
- * Required: DB_HOST, DB_USERNAME, DB_PASSWORD, DEFAULT_DB
- * Optional: DB_PORT (default 3306)
+ *
+ * Canonical env vars (preferred):
+ * - DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD, DEFAULT_DB
+ *
+ * Back-compat / alternate names:
+ * - MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB
+ * - RDS_HOSTNAME, RDS_PORT, RDS_USERNAME, RDS_PASSWORD, RDS_DB_NAME
  */
 function buildMySqlDataSourceOptionsFromEnv() {
   // Support multiple env-var naming conventions to avoid "mismatch" failures across environments.
-  // Canonical vars for this repo are DB_* and DEFAULT_DB, but previews sometimes provide MYSQL_*.
-  const host = process.env.DB_HOST || process.env.MYSQL_HOST || process.env.MYSQLHOST;
-  const username = process.env.DB_USERNAME || process.env.MYSQL_USER || process.env.MYSQL_USERNAME;
-  const password = process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD;
-  const database = process.env.DEFAULT_DB || process.env.MYSQL_DB || process.env.MYSQL_DATABASE;
+  const host =
+    process.env.DB_HOST ||
+    process.env.MYSQL_HOST ||
+    process.env.MYSQLHOST ||
+    process.env.RDS_HOSTNAME;
+  const username =
+    process.env.DB_USERNAME ||
+    process.env.MYSQL_USER ||
+    process.env.MYSQL_USERNAME ||
+    process.env.RDS_USERNAME;
+  const password =
+    process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD || process.env.RDS_PASSWORD;
+  const database =
+    process.env.DEFAULT_DB ||
+    process.env.MYSQL_DB ||
+    process.env.MYSQL_DATABASE ||
+    process.env.RDS_DB_NAME;
 
-  // Preview-specific override (requested): MySQL preview runs on port 3002.
-  // If MYSQL_PREVIEW_PORT is set, it wins; otherwise fall back to DB_PORT/MYSQL_PORT and finally 3306.
-  const port = parseIntEnv(
-    process.env.MYSQL_PREVIEW_PORT || process.env.DB_PORT || process.env.MYSQL_PORT,
-    3306
-  );
+  // Port selection (RDS-safe):
+  // - Prefer DB_PORT / MYSQL_PORT / RDS_PORT when set
+  // - Only allow MYSQL_PREVIEW_PORT to override if explicitly enabled (or env indicates preview)
+  const configuredPort = parseIntEnv(process.env.DB_PORT || process.env.MYSQL_PORT || process.env.RDS_PORT, 3306);
+  const previewPort = parseIntEnv(process.env.MYSQL_PREVIEW_PORT, configuredPort);
+
+  const port = shouldUsePreviewDbPort() ? previewPort : configuredPort;
 
   const connectTimeout = parseIntEnv(process.env.DB_CONNECT_TIMEOUT_MS, 20000);
   const poolSize = parseIntEnv(process.env.DB_POOL_SIZE, 10);
 
   const missing = [];
-  if (!host) missing.push('DB_HOST (or MYSQL_HOST)');
-  if (!username) missing.push('DB_USERNAME (or MYSQL_USER)');
-  if (!password) missing.push('DB_PASSWORD (or MYSQL_PASSWORD)');
-  if (!database) missing.push('DEFAULT_DB (or MYSQL_DB)');
+  if (!host) missing.push('DB_HOST (or MYSQL_HOST/RDS_HOSTNAME)');
+  if (!username) missing.push('DB_USERNAME (or MYSQL_USER/RDS_USERNAME)');
+  if (!password) missing.push('DB_PASSWORD (or MYSQL_PASSWORD/RDS_PASSWORD)');
+  if (!database) missing.push('DEFAULT_DB (or MYSQL_DB/RDS_DB_NAME)');
 
   if (missing.length > 0) {
     const err = new Error(`MySQL env vars missing: ${missing.join(', ')}`);

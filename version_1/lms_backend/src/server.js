@@ -18,10 +18,14 @@ async function start() {
   const dbName = getConfiguredDbName() || '(unknown)';
 
   // Safe startup log (no secrets).
-  const dbHost = process.env.DB_HOST || process.env.MYSQL_HOST || process.env.MYSQLHOST;
-  const dbPort = process.env.MYSQL_PREVIEW_PORT || process.env.DB_PORT || process.env.MYSQL_PORT || '3306';
+  // Note: preview DB port override is intentionally NOT assumed; actual port is resolved in config/db.js.
+  const dbHost =
+    process.env.DB_HOST || process.env.MYSQL_HOST || process.env.MYSQLHOST || process.env.RDS_HOSTNAME;
+  const dbPort = process.env.DB_PORT || process.env.MYSQL_PORT || process.env.RDS_PORT || '3306';
   console.log(
-    dbHost ? `MySQL target: ${dbHost}:${dbPort}/${dbName}` : 'MySQL target: (DB_HOST/MYSQL_HOST not set yet)'
+    dbHost
+      ? `MySQL target (configured): ${dbHost}:${dbPort}/${dbName}`
+      : 'MySQL target: (DB_HOST/MYSQL_HOST/RDS_HOSTNAME not set yet)'
   );
 
   try {
