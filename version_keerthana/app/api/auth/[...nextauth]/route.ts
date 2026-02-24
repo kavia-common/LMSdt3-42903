@@ -1,7 +1,8 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
+import { getBackendOrigin } from "@/lib/api/baseUrl";
 
-const backendUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(/\/+$/, "");
+const backendUrl = getBackendOrigin();
 
 async function findOrCreateAzureUser(email: string, name: string | null, azureId: string | null) {
   const res = await fetch(`${backendUrl}/auth/azure/find-or-create`, {
@@ -46,11 +47,7 @@ export const authOptions: NextAuthOptions = {
       try {
         const azureProfile = profile as { oid?: string; sub?: string };
         const azureId = azureProfile?.oid ?? azureProfile?.sub ?? null;
-        const data = await findOrCreateAzureUser(
-          user.email,
-          user.name ?? null,
-          azureId
-        );
+        const data = await findOrCreateAzureUser(user.email, user.name ?? null, azureId);
         (user as Record<string, unknown>).backendUserId = data.user.id;
         (user as Record<string, unknown>).role = data.user.role;
         (user as Record<string, unknown>).isInternal = data.user.isInternal;
@@ -68,8 +65,7 @@ export const authOptions: NextAuthOptions = {
         token.backendUserId =
           typeof userLike.backendUserId === "string" ? userLike.backendUserId : undefined;
         token.role = typeof userLike.role === "string" ? userLike.role : undefined;
-        token.isInternal =
-          typeof userLike.isInternal === "boolean" ? userLike.isInternal : undefined;
+        token.isInternal = typeof userLike.isInternal === "boolean" ? userLike.isInternal : undefined;
         token.status =
           userLike.status === "pending" || userLike.status === "revoked" || userLike.status === "active"
             ? userLike.status

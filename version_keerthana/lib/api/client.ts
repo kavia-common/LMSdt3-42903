@@ -4,10 +4,10 @@
  */
 
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { getBackendApiBaseUrl } from './baseUrl';
 
 // Backend mounts routes at /api; ensure base URL includes it
-const BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
-const API_BASE_URL = BASE.includes('/api') ? BASE : `${BASE}/api`;
+const API_BASE_URL = getBackendApiBaseUrl();
 
 // Create axios instance
 const apiClient = axios.create({
@@ -45,7 +45,8 @@ apiClient.interceptors.request.use(
     try {
       const mod = await import('next-auth/react');
       const session = await mod.getSession();
-      const sessionToken = (session?.user as { backendAccessToken?: string | null } | undefined)?.backendAccessToken;
+      const sessionToken = (session?.user as { backendAccessToken?: string | null } | undefined)
+        ?.backendAccessToken;
       if (sessionToken) {
         cachedNextAuthToken = sessionToken;
         cachedNextAuthTokenAt = now;
