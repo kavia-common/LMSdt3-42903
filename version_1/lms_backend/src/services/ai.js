@@ -1,6 +1,8 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929';
+// Keep defaults aligned with scripts/docs and current common availability.
+// Operators can override via ANTHROPIC_MODEL.
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
 const DEFAULT_MAX_TOKENS = Number(process.env.ANTHROPIC_MAX_TOKENS || 1024);
 const DEFAULT_ANTHROPIC_VERSION = process.env.ANTHROPIC_VERSION || '2023-06-01';
 
@@ -59,10 +61,13 @@ function normalizeLearnerQuiz(quiz) {
 
 class AIService {
   constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    // Canonical env var is ANTHROPIC_API_KEY. Accept ANTHROPIC_KEY as a back-compat alias.
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_KEY;
 
     if (!apiKey) {
-      const err = new Error('ANTHROPIC_API_KEY is not configured');
+      const err = new Error(
+        'Anthropic API key is not configured. Set ANTHROPIC_API_KEY in the backend environment (.env) and restart the service.'
+      );
       err.code = 'ANTHROPIC_API_KEY_MISSING';
       throw err;
     }
