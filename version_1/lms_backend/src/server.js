@@ -4,7 +4,14 @@ const app = require('./app');
 const { initializeDataSource, getConfiguredDbName, getDbMeta } = require('./config/db');
 
 
-const PORT = process.env.PORT || 3001;
+/**
+ * Backend preview contract:
+ * - This service is expected to be reachable on port 3001 in preview.
+ * - The manifest startCommand provides PORT=<port> which should be 3001.
+ * As a safety net, if PORT is accidentally set to 3002 (db preview port), force 3001.
+ */
+const requestedPort = Number(process.env.PORT || 3001);
+const PORT = requestedPort === 3002 ? 3001 : requestedPort;
 const HOST = process.env.HOST || '0.0.0.0';
 
 async function start() {
