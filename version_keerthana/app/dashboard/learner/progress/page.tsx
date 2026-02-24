@@ -1,0 +1,18 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function LearnerProgressPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/dashboard/learner");
+  }, [router]);
+
+  return (
+    <div className="flex items-center justify-center min-h-[200px]">
+      <p className="text-slate-500">Redirecting to dashboard...</p>
+    </div>
+  );
+}
