@@ -15,12 +15,20 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*')
 // Always allow localhost frontend (dev and local prod)
 const localhostOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
 
+// Allow explicit preview frontend URL if provided (useful for non-local preview domains)
+const explicitFrontendOrigin = (process.env.FRONTEND_URL || '').trim();
+const additionalOrigins = [explicitFrontendOrigin].filter(Boolean);
+
 app.use(cors({
   origin: (origin, cb) => {
+    // Non-browser clients (curl, server-to-server) often send no Origin; allow.
     if (!origin) return cb(null, true);
+
     if (allowedOrigins.includes('*')) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
     if (localhostOrigins.includes(origin)) return cb(null, true);
+    if (additionalOrigins.includes(origin)) return cb(null, true);
+
     return cb(new Error('Not allowed by CORS'));
   },
   methods: (process.env.ALLOWED_METHODS || 'GET,POST,PUT,DELETE,PATCH,OPTIONS').split(',').map((m) => m.trim()),
@@ -80,15 +88,16 @@ app.use('/docs', swaggerUi.serve, swaggerUiMiddleware);
 app.use(express.json());
 
 /**
- * Simple preview healthcheck endpoint.
+ * Simple preview healthcheck endpoints.
  * Keeps behavior minimal and stable for infrastructure checks.
  */
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
 /**
  * Mount routes:
  * - Root (existing): /auth, /courses, /lessons, etc.
- * - Alias (requested): /api/* -> same routes to provide /api/lessons/:id/generate-ai
+ * - Alias: /api/* -> same routes to support clients expecting an /api base path.
  */
 app.use('/', routes);
 app.use('/api', routes);
