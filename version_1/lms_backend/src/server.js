@@ -4,16 +4,29 @@ const app = require('./app');
 const { initializeDataSource, getConfiguredDbName, getDbMeta } = require('./config/db');
 
 
-const PORT = process.env.PORT || 3001;
+/**
+ * Backend preview contract:
+ * - This service is expected to be reachable on port 3001 in preview.
+ * - The manifest startCommand provides PORT=<port> which should be 3001.
+ * As a safety net, if PORT is accidentally set to 3002 (db preview port), force 3001.
+ */
+const requestedPort = Number(process.env.PORT || 3001);
+const PORT = requestedPort === 3002 ? 3001 : requestedPort;
 const HOST = process.env.HOST || '0.0.0.0';
 
 async function start() {
   const dbName = getConfiguredDbName() || '(unknown)';
 
   // Safe startup log (no secrets).
-  const dbHost = process.env.DB_HOST;
-  const dbPort = process.env.DB_PORT || '3306';
-  console.log(dbHost ? `MySQL target: ${dbHost}:${dbPort}/${dbName}` : 'MySQL target: (DB_HOST not set yet)');
+  // Note: preview DB port override is intentionally NOT assumed; actual port is resolved in config/db.js.
+  const dbHost =
+    process.env.DB_HOST || process.env.MYSQL_HOST || process.env.MYSQLHOST || process.env.RDS_HOSTNAME;
+  const dbPort = process.env.DB_PORT || process.env.MYSQL_PORT || process.env.RDS_PORT || '3306';
+  console.log(
+    dbHost
+      ? `MySQL target (configured): ${dbHost}:${dbPort}/${dbName}`
+      : 'MySQL target: (DB_HOST/MYSQL_HOST/RDS_HOSTNAME not set yet)'
+  );
 
   try {
     await initializeDataSource();

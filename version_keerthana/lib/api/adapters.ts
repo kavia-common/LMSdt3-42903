@@ -5,6 +5,7 @@
 
 import { getCourses, Course as APICourse } from './api/courses';
 import { getLessons, Lesson as APILesson } from './api/lessons';
+import { getBackendApiBaseUrl } from './baseUrl';
 
 /**
  * Fetch all courses from backend and adapt to learner courses format
@@ -114,7 +115,7 @@ export async function fetchCourseWithLessons(courseId: string) {
  */
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/health`, {
+    const response = await fetch(`${getBackendApiBaseUrl()}/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });

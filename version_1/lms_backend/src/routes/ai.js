@@ -2,23 +2,14 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const { createAIService } = require('../services/ai');
 const { getDataSource } = require('../config/db');
+const { toPublicAIError } = require('../utils/anthropicErrors');
 
 const router = express.Router();
 
 const LEARNER_AI_QUIZ_TOTAL = 10;
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 
-/** Anthropic auth error: invalid/missing API key or insufficient credits */
-function isAnthropicAuthError(err) {
-  if (!err) return false;
-  if (err?.status === 401) return true;
-  const msg = String(err?.message || '').toLowerCase();
-  if (msg.includes('invalid x-api-key') || msg.includes('authentication_error')) return true;
-  if (err?.error?.type === 'authentication_error') return true;
-  return false;
-}
-
-const AI_AUTH_ERROR_MESSAGE = 'AI service is temporarily unavailable. Please ensure ANTHROPIC_API_KEY is set correctly in the backend .env and your Anthropic account has sufficient credits.';
+const AI_FALLBACK_MESSAGE = 'The AI Mentor is currently resting. Please try again in a few minutes.';
 
 /**
  * @swagger
@@ -264,40 +255,15 @@ router.post('/chat', auth, async (req, res, next) => {
       const ai = createAIService();
       aiResponse = await ai.chat(message.trim(), enrichedContext);
     } catch (aiErr) {
-      // Log the error for debugging
+      // Log the error for debugging (no secrets).
       console.error('AI chat error:', {
         code: aiErr?.code,
         status: aiErr?.status,
         message: aiErr?.message,
-        stack: aiErr?.stack,
       });
 
-      // Handle specific AI errors
-      if (aiErr && aiErr.code === 'ANTHROPIC_API_KEY_MISSING') {
-        return res.status(503).json({
-          message: 'AI service not configured (missing ANTHROPIC_API_KEY)',
-          fallback: 'The AI Mentor is currently resting. Please try again in a few minutes.',
-        });
-      }
-
-      // Rate limit or API errors
-      if (aiErr && (aiErr.status === 429 || aiErr.status === 500 || aiErr.status === 503)) {
-        return res.status(503).json({
-          message: 'AI service temporarily unavailable',
-          fallback: 'The AI Mentor is currently resting. Please try again in a few minutes.',
-        });
-      }
-
-      // Handle other Anthropic API errors
-      if (aiErr && aiErr.status) {
-        return res.status(503).json({
-          message: `AI service error (${aiErr.status})`,
-          fallback: 'The AI Mentor is currently resting. Please try again in a few minutes.',
-        });
-      }
-
-      // Re-throw unexpected errors to be handled by Express error handler
-      throw aiErr;
+      const publicErr = toPublicAIError(aiErr, { fallback: AI_FALLBACK_MESSAGE });
+      return res.status(publicErr.status).json(publicErr.body);
     }
 
     return res.status(200).json({
@@ -338,11 +304,9 @@ router.post('/assignment-grade', auth, async (req, res, next) => {
 
     return res.status(200).json(result);
   } catch (err) {
-    if (err?.code === 'ANTHROPIC_API_KEY_MISSING' || err?.code === 'AI_INPUT_INVALID' || isAnthropicAuthError(err)) {
-      return res.status(503).json({ message: isAnthropicAuthError(err) ? AI_AUTH_ERROR_MESSAGE : (err.message || 'AI grading not available') });
-    }
-    console.error('AI assignment grade error:', err?.message || err);
-    return res.status(503).json({ message: err?.message || 'Failed to grade submission' });
+    const publicErr = toPublicAIError(err);
+    // For grading, we always return a 503 for upstream AI problems; input errors remain 400.
+    return res.status(publicErr.status).json(publicErr.body);
   }
 });
 
@@ -375,11 +339,8 @@ router.post('/assignment-feedback', auth, async (req, res, next) => {
 
     return res.status(200).json({ feedback });
   } catch (err) {
-    if (err?.code === 'ANTHROPIC_API_KEY_MISSING' || err?.code === 'AI_INPUT_INVALID' || isAnthropicAuthError(err)) {
-      return res.status(503).json({ message: isAnthropicAuthError(err) ? AI_AUTH_ERROR_MESSAGE : (err.message || 'AI feedback not available') });
-    }
-    console.error('AI assignment feedback error:', err?.message || err);
-    return res.status(503).json({ message: err?.message || 'Failed to generate feedback' });
+    const publicErr = toPublicAIError(err);
+    return res.status(publicErr.status).json(publicErr.body);
   }
 });
 
@@ -427,11 +388,8 @@ router.post('/instructor/generate-quiz-questions', auth, async (req, res, next) 
     }
     return res.status(200).json({ questions });
   } catch (err) {
-    if (err?.code === 'ANTHROPIC_API_KEY_MISSING' || err?.code === 'AI_INPUT_INVALID' || err?.code === 'AI_OUTPUT_INVALID_JSON' || err?.code === 'AI_OUTPUT_INVALID_SCHEMA' || isAnthropicAuthError(err)) {
-      return res.status(503).json({ message: isAnthropicAuthError(err) ? AI_AUTH_ERROR_MESSAGE : (err.message || 'AI quiz generation failed') });
-    }
-    console.error('AI instructor quiz generate error:', err?.message || err);
-    return res.status(503).json({ message: err?.message || 'Failed to generate quiz questions' });
+    const publicErr = toPublicAIError(err);
+    return res.status(publicErr.status).json(publicErr.body);
   }
 });
 
@@ -456,11 +414,8 @@ router.post('/instructor/generate-assignment', auth, async (req, res, next) => {
     const description = await ai.generateAssignmentDescription(input);
     return res.status(200).json({ description });
   } catch (err) {
-    if (err?.code === 'ANTHROPIC_API_KEY_MISSING' || err?.code === 'AI_INPUT_INVALID' || isAnthropicAuthError(err)) {
-      return res.status(503).json({ message: isAnthropicAuthError(err) ? AI_AUTH_ERROR_MESSAGE : (err.message || 'AI assignment generation failed') });
-    }
-    console.error('AI instructor assignment generate error:', err?.message || err);
-    return res.status(503).json({ message: err?.message || 'Failed to generate assignment' });
+    const publicErr = toPublicAIError(err);
+    return res.status(publicErr.status).json(publicErr.body);
   }
 });
 
@@ -503,16 +458,22 @@ router.post('/quiz/generate', auth, async (req, res, next) => {
     const safeQuestions = questions.map((q) => ({ questionText: q.questionText, options: q.options }));
     return res.status(200).json({ attemptId: attempt.id, questions: safeQuestions });
   } catch (err) {
-    if (err?.code === 'ANTHROPIC_API_KEY_MISSING' || err?.code === 'AI_INPUT_INVALID' || err?.code === 'AI_OUTPUT_INVALID_JSON' || err?.code === 'AI_OUTPUT_INVALID_SCHEMA' || isAnthropicAuthError(err)) {
-      return res.status(503).json({ message: isAnthropicAuthError(err) ? AI_AUTH_ERROR_MESSAGE : (err.message || 'AI quiz generation failed') });
+    // Preserve actionable DB-migration hint if this is a schema issue.
+    const isDbError =
+      err?.code === 'ER_NO_SUCH_TABLE' ||
+      err?.sqlMessage?.includes("doesn't exist") ||
+      err?.message?.includes('ai_quiz_attempts');
+
+    if (isDbError) {
+      return res.status(503).json({
+        message:
+          'AI quiz is not available yet. Please ask an administrator to run the database migration for ai_quiz_attempts.',
+        errorCode: 'DB_MIGRATION_REQUIRED',
+      });
     }
-    // Database or other errors: return 503 with a clear message instead of 500
-    console.error('AI quiz generate error:', err?.message || err);
-    const isDbError = err?.code === 'ER_NO_SUCH_TABLE' || err?.sqlMessage?.includes("doesn't exist") || err?.message?.includes('ai_quiz_attempts');
-    const message = isDbError
-      ? 'AI quiz is not available yet. Please ask an administrator to run the database migration for ai_quiz_attempts.'
-      : (err?.message || 'Failed to start quiz. Please try again.');
-    return res.status(503).json({ message });
+
+    const publicErr = toPublicAIError(err);
+    return res.status(publicErr.status).json(publicErr.body);
   }
 });
 

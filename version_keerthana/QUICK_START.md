@@ -31,7 +31,7 @@ cd version_1/lms_backend
 npm install  # If not already done
 npm run dev
 ```
-Backend should start on: http://localhost:4000
+Backend should start on: http://localhost:3001
 
 ### Step 2: Install Frontend Dependencies
 ```bash
@@ -174,8 +174,8 @@ The dashboard components currently use mock data. To integrate:
 **Problem**: Frontend can't reach backend
 **Solution**: 
 1. Check backend is running: `cd version_1/lms_backend && npm run dev`
-2. Verify port 4000 is not blocked
-3. Check `.env.local` has correct URL
+2. Verify port 3001 is not blocked
+3. Check `.env.local` (or `.env`) has `NEXT_PUBLIC_API_URL` set correctly
 
 ### "401 Unauthorized" errors
 **Problem**: Token invalid or missing
